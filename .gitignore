@@ -1,0 +1,10 @@
+**/.build/
+/dist/
+.DS_Store
+**/__pycache__/
+*.pyc
+.fvm/
+.idea/
+*.iml
+*.log
+.zig-cache/
