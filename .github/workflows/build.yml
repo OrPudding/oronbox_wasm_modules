@@ -1,26 +1,41 @@
-name: Build modules
+name: CI and Release
+
 on:
   push:
     branches: [main]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+
 permissions:
   contents: read
+
+concurrency:
+  group: modules-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 jobs:
   build:
+    name: Build modules
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+
       - uses: mlugg/setup-zig@v2
         with:
           version: '0.17.1'
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
       - name: Install build tools
         run: sudo apt-get update && sudo apt-get install -y cmake binaryen
-      - run: bash tool/build.sh
+
+      - name: Build and package modules
+        run: bash tool/build.sh
+
       - uses: actions/upload-artifact@v4
         with:
           name: wasm-modules
@@ -28,10 +43,14 @@ jobs:
             dist/*.zip
             dist/*.sha256
           if-no-files-found: error
+          retention-days: 1
+
   publish:
+    name: Publish release
     if: startsWith(github.ref, 'refs/tags/')
     needs: build
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
@@ -39,7 +58,12 @@ jobs:
         with:
           name: wasm-modules
           path: dist
-      - uses: softprops/action-gh-release@v2
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          fail_on_unmatched_files: true
           files: dist/*
